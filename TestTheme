@@ -1,0 +1,1961 @@
+local AimPart = "UpperTorso"  
+local AimlockKey = "x"
+local AimRadius = 15
+local ThirdPerson = true 
+local FirstPerson = true
+local TeamCheck = false
+local PredictMovement = false
+local PredictionVelocity = 0
+local Smoothness = false
+local SmoothnessAmount = 0.015
+local Notify = false
+
+local Players, Uis, RService, SGui = game:GetService"Players", game:GetService"UserInputService", game:GetService"RunService", game:GetService"StarterGui";
+local Client, Mouse, Camera, CF, RNew, Vec3, Vec2 = Players.LocalPlayer, Players.LocalPlayer:GetMouse(), workspace.CurrentCamera, CFrame.new, Ray.new, Vector3.new, Vector2.new;
+local Aimlock, MousePressed, CanNotify = false, false, false;
+local AimlockTarget;
+local OldPre;
+
+local WorldToViewportPoint = function(P)
+	return Camera:WorldToViewportPoint(P)
+end
+
+local WorldToScreenPoint = function(P)
+	return Camera.WorldToScreenPoint(Camera, P)
+end
+
+local GetObscuringObjects = function(T)
+	if T and T:FindFirstChild(AimPart) and Client and Client.Character:FindFirstChild("Head") then 
+		local RayPos = workspace:FindPartOnRay(RNew(
+			T[AimPart].Position, Client.Character.Head.Position)
+		)
+		if RayPos then return RayPos:IsDescendantOf(T) end
+	end
+end
+
+local GetNearestTarget = function()
+	local players = {}
+	local PLAYER_HOLD  = {}
+	local DISTANCES = {}
+	for i, v in pairs(Players:GetPlayers()) do
+		if v ~= Client then
+			table.insert(players, v)
+		end
+	end
+	for i, v in pairs(players) do
+		if v.Character ~= nil then
+			local AIM = v.Character:FindFirstChild("Head")
+			if TeamCheck == true and v.Team ~= Client.Team then
+				local DISTANCE = (v.Character:FindFirstChild("Head").Position - game.Workspace.CurrentCamera.CFrame.p).magnitude
+				local RAY = Ray.new(game.Workspace.CurrentCamera.CFrame.p, (Mouse.Hit.p - game.Workspace.CurrentCamera.CFrame.p).unit * DISTANCE)
+				local HIT,POS = game.Workspace:FindPartOnRay(RAY, game.Workspace)
+				local DIFF = math.floor((POS - AIM.Position).magnitude)
+				PLAYER_HOLD[v.Name .. i] = {}
+				PLAYER_HOLD[v.Name .. i].dist= DISTANCE
+				PLAYER_HOLD[v.Name .. i].plr = v
+				PLAYER_HOLD[v.Name .. i].diff = DIFF
+				table.insert(DISTANCES, DIFF)
+			elseif TeamCheck == false and v.Team == Client.Team then 
+				local DISTANCE = (v.Character:FindFirstChild("Head").Position - game.Workspace.CurrentCamera.CFrame.p).magnitude
+				local RAY = Ray.new(game.Workspace.CurrentCamera.CFrame.p, (Mouse.Hit.p - game.Workspace.CurrentCamera.CFrame.p).unit * DISTANCE)
+				local HIT,POS = game.Workspace:FindPartOnRay(RAY, game.Workspace)
+				local DIFF = math.floor((POS - AIM.Position).magnitude)
+				PLAYER_HOLD[v.Name .. i] = {}
+				PLAYER_HOLD[v.Name .. i].dist= DISTANCE
+				PLAYER_HOLD[v.Name .. i].plr = v
+				PLAYER_HOLD[v.Name .. i].diff = DIFF
+				table.insert(DISTANCES, DIFF)
+			end
+		end
+	end
+
+	if unpack(DISTANCES) == nil then
+		return nil
+	end
+
+	local L_DISTANCE = math.floor(math.min(unpack(DISTANCES)))
+	if L_DISTANCE > AimRadius then
+		return nil
+	end
+
+	for i, v in pairs(PLAYER_HOLD) do
+		if v.diff == L_DISTANCE then
+			return v.plr
+		end
+	end
+	return nil
+end
+
+Mouse.KeyDown:Connect(function(a)
+	if not (Uis:GetFocusedTextBox()) then 
+		if a == AimlockKey and AimlockTarget == nil then
+			pcall(function()
+				if MousePressed ~= true then
+					MousePressed = true
+				end 
+				local Target;Target = GetNearestTarget()
+				if Target ~= nil then 
+					AimlockTarget = Target
+				end
+			end)
+		elseif a == AimlockKey and AimlockTarget ~= nil then
+			if AimlockTarget ~= nil then
+				AimlockTarget = nil
+
+				if Notify == true then
+					game.StarterGui:SetCore("SendNotification", {
+						Title = 'Renaz';
+						Text = AimlockTarget;
+						Duration = 1.5;
+					})
+				end
+			end
+			if MousePressed ~= false then 
+				MousePressed = false 
+			end
+		end
+	end
+end)
+
+RService.RenderStepped:Connect(function()
+	if ThirdPerson == true and FirstPerson == true then 
+		if (Camera.Focus.p - Camera.CoordinateFrame.p).Magnitude > 1 or (Camera.Focus.p - Camera.CoordinateFrame.p).Magnitude <= 1 then 
+			CanNotify = true 
+		else 
+			CanNotify = false 
+		end
+	elseif ThirdPerson == true and FirstPerson == false then 
+		if (Camera.Focus.p - Camera.CoordinateFrame.p).Magnitude > 1 then 
+			CanNotify = true 
+		else 
+			CanNotify = false 
+		end
+	elseif ThirdPerson == false and FirstPerson == true then 
+		if (Camera.Focus.p - Camera.CoordinateFrame.p).Magnitude <= 1 then 
+			CanNotify = true 
+		else 
+			CanNotify = false 
+		end
+	end
+	if Aimlock == true and MousePressed == true then 
+		if AimlockTarget and AimlockTarget.Character and AimlockTarget.Character:FindFirstChild(AimPart) then 
+			if FirstPerson == true then
+				if CanNotify == true then
+					if PredictMovement == true then
+						if Smoothness == true then
+							local Main = CF(Camera.CFrame.p, AimlockTarget.Character[AimPart].Position + AimlockTarget.Character[AimPart].Velocity * PredictionVelocity)
+							Camera.CFrame = Camera.CFrame:Lerp(Main, SmoothnessAmount, Enum.EasingStyle.Bounce, Enum.EasingDirection.InOut)
+						else
+							Camera.CFrame = CF(Camera.CFrame.p, AimlockTarget.Character[AimPart].Position + AimlockTarget.Character[AimPart].Velocity * PredictionVelocity)
+						end
+					elseif PredictMovement == false then 
+						if Smoothness == true then
+							local Main = CF(Camera.CFrame.p, AimlockTarget.Character[AimPart].Position)
+							Camera.CFrame = Camera.CFrame:Lerp(Main, SmoothnessAmount, Enum.EasingStyle.Bounce, Enum.EasingDirection.InOut)
+						else
+							Camera.CFrame = CF(Camera.CFrame.p, AimlockTarget.Character[AimPart].Position)
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+local Background = Instance.new("Frame")
+local UICorner = Instance.new("UICorner")
+local UIStroke = Instance.new("UIStroke")
+local UIListLayout = Instance.new("UIListLayout")
+local MainBorder = Instance.new("Frame")
+local UICorner_2 = Instance.new("UICorner")
+local UIStroke_2 = Instance.new("UIStroke")
+local Tabs = Instance.new("Frame")
+local UIStroke_3 = Instance.new("UIStroke")
+local UICorner_3 = Instance.new("UICorner")
+local Line = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local Title2 = Instance.new("TextLabel")
+local AimbotButton = Instance.new("TextButton")
+local UICorner_4 = Instance.new("UICorner")
+local ResolverButton = Instance.new("TextButton")
+local UICorner_5 = Instance.new("UICorner")
+local MainText = Instance.new("TextLabel")
+local Line_2 = Instance.new("Frame")
+local UICorner_6 = Instance.new("UICorner")
+local VisualButton = Instance.new("TextButton")
+local UICorner_7 = Instance.new("UICorner")
+local PlayerText = Instance.new("TextLabel")
+local Line_3 = Instance.new("Frame")
+local UICorner_8 = Instance.new("UICorner")
+local AimbotTab = Instance.new("Frame")
+local MainSec = Instance.new("Frame")
+local UICorner_9 = Instance.new("UICorner")
+local UIStroke_4 = Instance.new("UIStroke")
+local Line_4 = Instance.new("Frame")
+local TitleSec = Instance.new("TextLabel")
+local AimlockToggle = Instance.new("ImageButton")
+local UICorner_10 = Instance.new("UICorner")
+local UIStroke_5 = Instance.new("UIStroke")
+local ToggleText = Instance.new("TextLabel")
+local PredictionToggle = Instance.new("ImageButton")
+local UICorner_11 = Instance.new("UICorner")
+local UIStroke_6 = Instance.new("UIStroke")
+local ToggleText_2 = Instance.new("TextLabel")
+local SmoothnessToggle = Instance.new("ImageButton")
+local UICorner_12 = Instance.new("UICorner")
+local UIStroke_7 = Instance.new("UIStroke")
+local ToggleText_3 = Instance.new("TextLabel")
+local AutoPredictionToggle = Instance.new("ImageButton")
+local UICorner_13 = Instance.new("UICorner")
+local UIStroke_8 = Instance.new("UIStroke")
+local ToggleText_4 = Instance.new("TextLabel")
+local TeamCheckToggle = Instance.new("ImageButton")
+local UICorner_14 = Instance.new("UICorner")
+local UIStroke_9 = Instance.new("UIStroke")
+local ToggleText_5 = Instance.new("TextLabel")
+local SettingsSec = Instance.new("Frame")
+local UICorner_15 = Instance.new("UICorner")
+local UIStroke_10 = Instance.new("UIStroke")
+local Line_5 = Instance.new("Frame")
+local TitleSec_2 = Instance.new("TextLabel")
+local Keybind = Instance.new("TextBox")
+local UICorner_16 = Instance.new("UICorner")
+local UIStroke_11 = Instance.new("UIStroke")
+local KeybindText = Instance.new("TextLabel")
+local Prediction = Instance.new("TextBox")
+local UICorner_17 = Instance.new("UICorner")
+local UIStroke_12 = Instance.new("UIStroke")
+local KeybindText_2 = Instance.new("TextLabel")
+local Smoothness = Instance.new("TextBox")
+local UICorner_18 = Instance.new("UICorner")
+local UIStroke_13 = Instance.new("UIStroke")
+local KeybindText_3 = Instance.new("TextLabel")
+local HitPartButton = Instance.new("TextButton")
+local UICorner_19 = Instance.new("UICorner")
+local UIStroke_14 = Instance.new("UIStroke")
+local PartSec = Instance.new("Frame")
+local UICorner_20 = Instance.new("UICorner")
+local UIStroke_15 = Instance.new("UIStroke")
+local Line_6 = Instance.new("Frame")
+local TitleSec_3 = Instance.new("TextLabel")
+local HeadButton = Instance.new("TextButton")
+local UICorner_21 = Instance.new("UICorner")
+local UIStroke_16 = Instance.new("UIStroke")
+local UpperButton = Instance.new("TextButton")
+local UICorner_22 = Instance.new("UICorner")
+local UIStroke_17 = Instance.new("UIStroke")
+local TorsoButton = Instance.new("TextButton")
+local UICorner_23 = Instance.new("UICorner")
+local UIStroke_18 = Instance.new("UIStroke")
+local LowerButton = Instance.new("TextButton")
+local UICorner_24 = Instance.new("UICorner")
+local UIStroke_19 = Instance.new("UIStroke")
+local ResolverTab = Instance.new("Frame")
+local MainSec_2 = Instance.new("Frame")
+local UICorner_25 = Instance.new("UICorner")
+local UIStroke_20 = Instance.new("UIStroke")
+local Line_7 = Instance.new("Frame")
+local TitleSec_4 = Instance.new("TextLabel")
+local NoPredToggle = Instance.new("ImageButton")
+local UICorner_26 = Instance.new("UICorner")
+local UIStroke_21 = Instance.new("UIStroke")
+local ToggleText_6 = Instance.new("TextLabel")
+local MoveDirectionToggle = Instance.new("ImageButton")
+local UICorner_27 = Instance.new("UICorner")
+local UIStroke_22 = Instance.new("UIStroke")
+local ToggleText_7 = Instance.new("TextLabel")
+local VisualizerTab = Instance.new("Frame")
+local MainSec_3 = Instance.new("Frame")
+local UICorner_28 = Instance.new("UICorner")
+local UIStroke_23 = Instance.new("UIStroke")
+local Line_8 = Instance.new("Frame")
+local TitleSec_5 = Instance.new("TextLabel")
+local TrailsToggle = Instance.new("ImageButton")
+local UICorner_29 = Instance.new("UICorner")
+local UIStroke_24 = Instance.new("UIStroke")
+local ToggleText_8 = Instance.new("TextLabel")
+local SelfChamToggle = Instance.new("ImageButton")
+local UICorner_30 = Instance.new("UICorner")
+local UIStroke_25 = Instance.new("UIStroke")
+local ToggleText_9 = Instance.new("TextLabel")
+local PlayersChamToggle = Instance.new("ImageButton")
+local UICorner_31 = Instance.new("UICorner")
+local UIStroke_26 = Instance.new("UIStroke")
+local ToggleText_10 = Instance.new("TextLabel")
+local WaypointSec = Instance.new("Frame")
+local UICorner_32 = Instance.new("UICorner")
+local UIStroke_27 = Instance.new("UIStroke")
+local Line_9 = Instance.new("Frame")
+local TitleSec_6 = Instance.new("TextLabel")
+local Waypoints = Instance.new("TextBox")
+local UICorner_33 = Instance.new("UICorner")
+local UIStroke_28 = Instance.new("UIStroke")
+local WaypointButton = Instance.new("TextButton")
+local UICorner_34 = Instance.new("UICorner")
+local UIStroke_29 = Instance.new("UIStroke")
+local CharacterSec = Instance.new("Frame")
+local UICorner_35 = Instance.new("UICorner")
+local UIStroke_30 = Instance.new("UIStroke")
+local Line_10 = Instance.new("Frame")
+local TitleSec_7 = Instance.new("TextLabel")
+local HeadlessButton = Instance.new("TextButton")
+local UICorner_36 = Instance.new("UICorner")
+local UIStroke_31 = Instance.new("UIStroke")
+local KorbloxButton = Instance.new("TextButton")
+local UICorner_37 = Instance.new("UICorner")
+local UIStroke_32 = Instance.new("UIStroke")
+
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+Background.Name = "Background"
+Background.Parent = ScreenGui
+Background.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Background.BackgroundTransparency = 1.000
+Background.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Background.BorderSizePixel = 0
+Background.Position = UDim2.new(0.360865027, 0, 0.263613969, 0)
+Background.Size = UDim2.new(0, 452, 0, 424)
+
+UICorner.Parent = Background
+
+UIStroke.Parent = Background
+UIStroke.Thickness = 2.000
+
+UIListLayout.Parent = Background
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+
+MainBorder.Name = "MainBorder"
+MainBorder.Parent = Background
+MainBorder.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainBorder.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainBorder.BorderSizePixel = 0
+MainBorder.Position = UDim2.new(0.0774336308, 0, 0.214622647, 0)
+MainBorder.Size = UDim2.new(0, 452, 0, 424)
+MainBorder.ZIndex = 0
+
+UICorner_2.Parent = MainBorder
+
+UIStroke_2.Parent = MainBorder
+UIStroke_2.Color = Color3.fromRGB(35, 35, 35)
+
+Tabs.Name = "Tabs"
+Tabs.Parent = MainBorder
+Tabs.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Tabs.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Tabs.BorderSizePixel = 0
+Tabs.Size = UDim2.new(0, 109, 0, 424)
+
+UIStroke_3.Parent = Tabs
+UIStroke_3.Color = Color3.fromRGB(35, 35, 35)
+
+UICorner_3.CornerRadius = UDim.new(0, 7)
+UICorner_3.Parent = Tabs
+
+Line.Name = "Line"
+Line.Parent = MainBorder
+Line.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line.BorderSizePixel = 0
+Line.Position = UDim2.new(0.241150439, 0, 0.0707547143, 0)
+Line.Size = UDim2.new(0, 343, 0, 1)
+
+Title.Name = "Title"
+Title.Parent = MainBorder
+Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1.000
+Title.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Title.BorderSizePixel = 0
+Title.Position = UDim2.new(0.254424781, 0, 0, 0)
+Title.Size = UDim2.new(0, 50, 0, 30)
+Title.Font = Enum.Font.Gotham
+Title.Text = "Rentaz"
+Title.TextColor3 = Color3.fromRGB(202, 202, 202)
+Title.TextSize = 14.000
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+Title2.Name = "Title2"
+Title2.Parent = MainBorder
+Title2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Title2.BackgroundTransparency = 1.000
+Title2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Title2.BorderSizePixel = 0
+Title2.Position = UDim2.new(0.365044236, 0, 0, 0)
+Title2.Size = UDim2.new(0, 50, 0, 30)
+Title2.Font = Enum.Font.Gotham
+Title2.Text = "Exclusive"
+Title2.TextColor3 = Color3.fromRGB(85, 85, 127)
+Title2.TextSize = 14.000
+Title2.TextXAlignment = Enum.TextXAlignment.Left
+
+AimbotButton.Name = "AimbotButton"
+AimbotButton.Parent = MainBorder
+AimbotButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AimbotButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+AimbotButton.BorderSizePixel = 0
+AimbotButton.Position = UDim2.new(0.0132743362, 0, 0.0731132105, 0)
+AimbotButton.Size = UDim2.new(0, 97, 0, 24)
+AimbotButton.Font = Enum.Font.Gotham
+AimbotButton.Text = " | Aimbot"
+AimbotButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+AimbotButton.TextSize = 13.000
+AimbotButton.TextXAlignment = Enum.TextXAlignment.Left
+
+UICorner_4.CornerRadius = UDim.new(0, 4)
+UICorner_4.Parent = AimbotButton
+
+ResolverButton.Name = "ResolverButton"
+ResolverButton.Parent = MainBorder
+ResolverButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ResolverButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ResolverButton.BorderSizePixel = 0
+ResolverButton.Position = UDim2.new(0.0132743362, 0, 0.143867925, 0)
+ResolverButton.Size = UDim2.new(0, 97, 0, 24)
+ResolverButton.Font = Enum.Font.Gotham
+ResolverButton.Text = " | Resolver"
+ResolverButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+ResolverButton.TextSize = 13.000
+ResolverButton.TextXAlignment = Enum.TextXAlignment.Left
+
+UICorner_5.CornerRadius = UDim.new(0, 4)
+UICorner_5.Parent = ResolverButton
+
+MainText.Name = "MainText"
+MainText.Parent = MainBorder
+MainText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+MainText.BackgroundTransparency = 1.000
+MainText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainText.BorderSizePixel = 0
+MainText.Position = UDim2.new(0.0132743362, 0, 0.011792453, 0)
+MainText.Size = UDim2.new(0, 35, 0, 19)
+MainText.Font = Enum.Font.Gotham
+MainText.Text = "Main"
+MainText.TextColor3 = Color3.fromRGB(202, 202, 202)
+MainText.TextSize = 14.000
+MainText.TextXAlignment = Enum.TextXAlignment.Left
+
+Line_2.Name = "Line"
+Line_2.Parent = MainText
+Line_2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Line_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_2.BorderSizePixel = 0
+Line_2.Position = UDim2.new(1, 0, 0.326316446, 0)
+Line_2.Size = UDim2.new(0, 61, 0, 5)
+
+UICorner_6.CornerRadius = UDim.new(0, 100)
+UICorner_6.Parent = Line_2
+
+VisualButton.Name = "VisualButton"
+VisualButton.Parent = MainBorder
+VisualButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+VisualButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+VisualButton.BorderSizePixel = 0
+VisualButton.Position = UDim2.new(0.0132743362, 0, 0.275943398, 0)
+VisualButton.Size = UDim2.new(0, 97, 0, 24)
+VisualButton.Font = Enum.Font.Gotham
+VisualButton.Text = " | Visualizer"
+VisualButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+VisualButton.TextSize = 13.000
+VisualButton.TextXAlignment = Enum.TextXAlignment.Left
+
+UICorner_7.CornerRadius = UDim.new(0, 4)
+UICorner_7.Parent = VisualButton
+
+PlayerText.Name = "PlayerText"
+PlayerText.Parent = MainBorder
+PlayerText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+PlayerText.BackgroundTransparency = 1.000
+PlayerText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+PlayerText.BorderSizePixel = 0
+PlayerText.Position = UDim2.new(0.0132743362, 0, 0.214622647, 0)
+PlayerText.Size = UDim2.new(0, 35, 0, 19)
+PlayerText.Font = Enum.Font.Gotham
+PlayerText.Text = "Player"
+PlayerText.TextColor3 = Color3.fromRGB(202, 202, 202)
+PlayerText.TextSize = 14.000
+PlayerText.TextXAlignment = Enum.TextXAlignment.Left
+
+Line_3.Name = "Line"
+Line_3.Parent = PlayerText
+Line_3.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Line_3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_3.BorderSizePixel = 0
+Line_3.Position = UDim2.new(1.31428576, 0, 0.326316446, 0)
+Line_3.Size = UDim2.new(0, 50, 0, 5)
+
+UICorner_8.CornerRadius = UDim.new(0, 100)
+UICorner_8.Parent = Line_3
+
+AimbotTab.Name = "AimbotTab"
+AimbotTab.Parent = MainBorder
+AimbotTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+AimbotTab.BackgroundTransparency = 0.999
+AimbotTab.BorderColor3 = Color3.fromRGB(0, 0, 0)
+AimbotTab.BorderSizePixel = 0
+AimbotTab.Position = UDim2.new(0.240999997, 0, 0.0729999989, 0)
+AimbotTab.Size = UDim2.new(0, 343, 0, 393)
+
+MainSec.Name = "MainSec"
+MainSec.Parent = AimbotTab
+MainSec.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+MainSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainSec.BorderSizePixel = 0
+MainSec.Position = UDim2.new(0.0174927115, 0, 0.0152671756, 0)
+MainSec.Size = UDim2.new(0, 162, 0, 380)
+
+UICorner_9.Parent = MainSec
+
+UIStroke_4.Parent = MainSec
+UIStroke_4.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_4.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_4.Name = "Line"
+Line_4.Parent = MainSec
+Line_4.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_4.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_4.BorderSizePixel = 0
+Line_4.Position = UDim2.new(0, 0, 0.0631578937, 0)
+Line_4.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec.Name = "TitleSec"
+TitleSec.Parent = MainSec
+TitleSec.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec.BackgroundTransparency = 1.000
+TitleSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec.BorderSizePixel = 0
+TitleSec.Position = UDim2.new(0.041091308, 0, 0, 0)
+TitleSec.Size = UDim2.new(0, 43, 0, 25)
+TitleSec.Font = Enum.Font.Gotham
+TitleSec.Text = "Main"
+TitleSec.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec.TextSize = 14.000
+TitleSec.TextXAlignment = Enum.TextXAlignment.Left
+
+AimlockToggle.Name = "AimlockToggle"
+AimlockToggle.Parent = MainSec
+AimlockToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AimlockToggle.Position = UDim2.new(0.870370388, 0, 0.0821052119, 0)
+AimlockToggle.Size = UDim2.new(0, 15, 0, 15)
+AimlockToggle.Image = "rbxassetid://3926305904"
+AimlockToggle.ImageRectOffset = Vector2.new(312, 4)
+AimlockToggle.ImageRectSize = Vector2.new(24, 24)
+AimlockToggle.ImageTransparency = 1.000
+
+UICorner_10.CornerRadius = UDim.new(0, 3)
+UICorner_10.Parent = AimlockToggle
+
+UIStroke_5.Parent = AimlockToggle
+UIStroke_5.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_5.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText.Name = "ToggleText"
+ToggleText.Parent = AimlockToggle
+ToggleText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText.BackgroundTransparency = 1.000
+ToggleText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText.BorderSizePixel = 0
+ToggleText.Position = UDim2.new(-9.01224327, 0, 0, 0)
+ToggleText.Size = UDim2.new(0, 50, 0, 15)
+ToggleText.Font = Enum.Font.Gotham
+ToggleText.Text = "Enable"
+ToggleText.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText.TextSize = 12.000
+ToggleText.TextXAlignment = Enum.TextXAlignment.Left
+
+PredictionToggle.Name = "PredictionToggle"
+PredictionToggle.Parent = MainSec
+PredictionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+PredictionToggle.Position = UDim2.new(0.870370388, 0, 0.137368366, 0)
+PredictionToggle.Size = UDim2.new(0, 15, 0, 15)
+PredictionToggle.Image = "rbxassetid://3926305904"
+PredictionToggle.ImageRectOffset = Vector2.new(312, 4)
+PredictionToggle.ImageRectSize = Vector2.new(24, 24)
+PredictionToggle.ImageTransparency = 1.000
+
+UICorner_11.CornerRadius = UDim.new(0, 3)
+UICorner_11.Parent = PredictionToggle
+
+UIStroke_6.Parent = PredictionToggle
+UIStroke_6.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_6.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_2.Name = "ToggleText"
+ToggleText_2.Parent = PredictionToggle
+ToggleText_2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_2.BackgroundTransparency = 1.000
+ToggleText_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_2.BorderSizePixel = 0
+ToggleText_2.Position = UDim2.new(-9.01224327, 0, 0, 0)
+ToggleText_2.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_2.Font = Enum.Font.Gotham
+ToggleText_2.Text = "Prediction"
+ToggleText_2.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_2.TextSize = 12.000
+ToggleText_2.TextXAlignment = Enum.TextXAlignment.Left
+
+SmoothnessToggle.Name = "SmoothnessToggle"
+SmoothnessToggle.Parent = MainSec
+SmoothnessToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SmoothnessToggle.Position = UDim2.new(0.870370388, 0, 0.192631528, 0)
+SmoothnessToggle.Size = UDim2.new(0, 15, 0, 15)
+SmoothnessToggle.Image = "rbxassetid://3926305904"
+SmoothnessToggle.ImageRectOffset = Vector2.new(312, 4)
+SmoothnessToggle.ImageRectSize = Vector2.new(24, 24)
+SmoothnessToggle.ImageTransparency = 1.000
+
+UICorner_12.CornerRadius = UDim.new(0, 3)
+UICorner_12.Parent = SmoothnessToggle
+
+UIStroke_7.Parent = SmoothnessToggle
+UIStroke_7.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_7.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_3.Name = "ToggleText"
+ToggleText_3.Parent = SmoothnessToggle
+ToggleText_3.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_3.BackgroundTransparency = 1.000
+ToggleText_3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_3.BorderSizePixel = 0
+ToggleText_3.Position = UDim2.new(-9.01224327, 0, 0, 0)
+ToggleText_3.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_3.Font = Enum.Font.Gotham
+ToggleText_3.Text = "Smoothness"
+ToggleText_3.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_3.TextSize = 12.000
+ToggleText_3.TextXAlignment = Enum.TextXAlignment.Left
+
+AutoPredictionToggle.Name = "AutoPredictionToggle"
+AutoPredictionToggle.Parent = MainSec
+AutoPredictionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AutoPredictionToggle.Position = UDim2.new(0.870000005, 0, 0.247999996, 0)
+AutoPredictionToggle.Size = UDim2.new(0, 15, 0, 15)
+AutoPredictionToggle.Image = "rbxassetid://3926305904"
+AutoPredictionToggle.ImageRectOffset = Vector2.new(312, 4)
+AutoPredictionToggle.ImageRectSize = Vector2.new(24, 24)
+AutoPredictionToggle.ImageTransparency = 1.000
+
+UICorner_13.CornerRadius = UDim.new(0, 3)
+UICorner_13.Parent = AutoPredictionToggle
+
+UIStroke_8.Parent = AutoPredictionToggle
+UIStroke_8.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_4.Name = "ToggleText"
+ToggleText_4.Parent = AutoPredictionToggle
+ToggleText_4.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_4.BackgroundTransparency = 1.000
+ToggleText_4.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_4.BorderSizePixel = 0
+ToggleText_4.Position = UDim2.new(-9.01224327, 0, 0, 0)
+ToggleText_4.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_4.Font = Enum.Font.Gotham
+ToggleText_4.Text = "Auto Prediction"
+ToggleText_4.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_4.TextSize = 11.000
+ToggleText_4.TextXAlignment = Enum.TextXAlignment.Left
+
+TeamCheckToggle.Name = "TeamCheckToggle"
+TeamCheckToggle.Parent = MainSec
+TeamCheckToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+TeamCheckToggle.Position = UDim2.new(0.870000005, 0, 0.303263128, 0)
+TeamCheckToggle.Size = UDim2.new(0, 15, 0, 15)
+TeamCheckToggle.Image = "rbxassetid://3926305904"
+TeamCheckToggle.ImageRectOffset = Vector2.new(312, 4)
+TeamCheckToggle.ImageRectSize = Vector2.new(24, 24)
+TeamCheckToggle.ImageTransparency = 1.000
+
+UICorner_14.CornerRadius = UDim.new(0, 3)
+UICorner_14.Parent = TeamCheckToggle
+
+UIStroke_9.Parent = TeamCheckToggle
+UIStroke_9.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_9.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_5.Name = "ToggleText"
+ToggleText_5.Parent = TeamCheckToggle
+ToggleText_5.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_5.BackgroundTransparency = 1.000
+ToggleText_5.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_5.BorderSizePixel = 0
+ToggleText_5.Position = UDim2.new(-9.01224327, 0, 0, 0)
+ToggleText_5.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_5.Font = Enum.Font.Gotham
+ToggleText_5.Text = "Team Check"
+ToggleText_5.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_5.TextSize = 11.000
+ToggleText_5.TextXAlignment = Enum.TextXAlignment.Left
+
+SettingsSec.Name = "SettingsSec"
+SettingsSec.Parent = AimbotTab
+SettingsSec.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+SettingsSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+SettingsSec.BorderSizePixel = 0
+SettingsSec.Position = UDim2.new(0.509460986, 0, 0.0127228014, 0)
+SettingsSec.Size = UDim2.new(0, 162, 0, 380)
+
+UICorner_15.Parent = SettingsSec
+
+UIStroke_10.Parent = SettingsSec
+UIStroke_10.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_10.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_5.Name = "Line"
+Line_5.Parent = SettingsSec
+Line_5.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_5.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_5.BorderSizePixel = 0
+Line_5.Position = UDim2.new(0, 0, 0.0631578937, 0)
+Line_5.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec_2.Name = "TitleSec"
+TitleSec_2.Parent = SettingsSec
+TitleSec_2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_2.BackgroundTransparency = 1.000
+TitleSec_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_2.BorderSizePixel = 0
+TitleSec_2.Position = UDim2.new(0.041091308, 0, 0, 0)
+TitleSec_2.Size = UDim2.new(0, 43, 0, 25)
+TitleSec_2.Font = Enum.Font.Gotham
+TitleSec_2.Text = "Settings"
+TitleSec_2.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_2.TextSize = 14.000
+TitleSec_2.TextXAlignment = Enum.TextXAlignment.Left
+
+Keybind.Name = "Keybind"
+Keybind.Parent = SettingsSec
+Keybind.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Keybind.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Keybind.BorderSizePixel = 0
+Keybind.Position = UDim2.new(0.716049373, 0, 0.0815789476, 0)
+Keybind.Size = UDim2.new(0, 40, 0, 15)
+Keybind.Font = Enum.Font.Gotham
+Keybind.PlaceholderText = "[None]"
+Keybind.Text = ""
+Keybind.TextColor3 = Color3.fromRGB(202, 202, 202)
+Keybind.TextSize = 10.000
+
+UICorner_16.CornerRadius = UDim.new(0, 3)
+UICorner_16.Parent = Keybind
+
+UIStroke_11.Parent = Keybind
+UIStroke_11.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_11.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+KeybindText.Name = "KeybindText"
+KeybindText.Parent = Keybind
+KeybindText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+KeybindText.BackgroundTransparency = 1.000
+KeybindText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+KeybindText.BorderSizePixel = 0
+KeybindText.Position = UDim2.new(-2.73724365, 0, 0, 0)
+KeybindText.Size = UDim2.new(0, 50, 0, 15)
+KeybindText.Font = Enum.Font.Gotham
+KeybindText.Text = "Keybind"
+KeybindText.TextColor3 = Color3.fromRGB(202, 202, 202)
+KeybindText.TextSize = 12.000
+KeybindText.TextXAlignment = Enum.TextXAlignment.Left
+
+Prediction.Name = "Prediction"
+Prediction.Parent = SettingsSec
+Prediction.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Prediction.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Prediction.BorderSizePixel = 0
+Prediction.Position = UDim2.new(0.592592597, 0, 0.136842102, 0)
+Prediction.Size = UDim2.new(0, 60, 0, 15)
+Prediction.Font = Enum.Font.Gotham
+Prediction.PlaceholderText = "0"
+Prediction.Text = ""
+Prediction.TextColor3 = Color3.fromRGB(202, 202, 202)
+Prediction.TextSize = 10.000
+
+UICorner_17.CornerRadius = UDim.new(0, 3)
+UICorner_17.Parent = Prediction
+
+UIStroke_12.Parent = Prediction
+UIStroke_12.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_12.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+KeybindText_2.Name = "KeybindText"
+KeybindText_2.Parent = Prediction
+KeybindText_2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+KeybindText_2.BackgroundTransparency = 1.000
+KeybindText_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+KeybindText_2.BorderSizePixel = 0
+KeybindText_2.Position = UDim2.new(-1.5039103, 0, 0, 0)
+KeybindText_2.Size = UDim2.new(0, 50, 0, 15)
+KeybindText_2.Font = Enum.Font.Gotham
+KeybindText_2.Text = "Prediction"
+KeybindText_2.TextColor3 = Color3.fromRGB(202, 202, 202)
+KeybindText_2.TextSize = 12.000
+KeybindText_2.TextXAlignment = Enum.TextXAlignment.Left
+
+Smoothness.Name = "Smoothness"
+Smoothness.Parent = SettingsSec
+Smoothness.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Smoothness.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Smoothness.BorderSizePixel = 0
+Smoothness.Position = UDim2.new(0.592592597, 0, 0.192105263, 0)
+Smoothness.Size = UDim2.new(0, 60, 0, 15)
+Smoothness.Font = Enum.Font.Gotham
+Smoothness.PlaceholderText = "0"
+Smoothness.Text = ""
+Smoothness.TextColor3 = Color3.fromRGB(202, 202, 202)
+Smoothness.TextSize = 10.000
+
+UICorner_18.CornerRadius = UDim.new(0, 3)
+UICorner_18.Parent = Smoothness
+
+UIStroke_13.Parent = Smoothness
+UIStroke_13.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_13.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+KeybindText_3.Name = "KeybindText"
+KeybindText_3.Parent = Smoothness
+KeybindText_3.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+KeybindText_3.BackgroundTransparency = 1.000
+KeybindText_3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+KeybindText_3.BorderSizePixel = 0
+KeybindText_3.Position = UDim2.new(-1.5039103, 0, 0, 0)
+KeybindText_3.Size = UDim2.new(0, 50, 0, 15)
+KeybindText_3.Font = Enum.Font.Gotham
+KeybindText_3.Text = "Smoothness"
+KeybindText_3.TextColor3 = Color3.fromRGB(202, 202, 202)
+KeybindText_3.TextSize = 12.000
+KeybindText_3.TextXAlignment = Enum.TextXAlignment.Left
+
+HitPartButton.Name = "HitPartButton"
+HitPartButton.Parent = SettingsSec
+HitPartButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+HitPartButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+HitPartButton.BorderSizePixel = 0
+HitPartButton.Position = UDim2.new(0.0410913527, 0, 0.247368425, 0)
+HitPartButton.Size = UDim2.new(0, 149, 0, 15)
+HitPartButton.Font = Enum.Font.Gotham
+HitPartButton.Text = "Hit-Part +"
+HitPartButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+HitPartButton.TextSize = 11.000
+
+UICorner_19.CornerRadius = UDim.new(0, 3)
+UICorner_19.Parent = HitPartButton
+
+UIStroke_14.Parent = HitPartButton
+UIStroke_14.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_14.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+PartSec.Name = "PartSec"
+PartSec.Parent = HitPartButton
+PartSec.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+PartSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+PartSec.BorderSizePixel = 0
+PartSec.Position = UDim2.new(0, 0, 1.44333696, 0)
+PartSec.Size = UDim2.new(0, 149, 0, 100)
+PartSec.Visible = false
+
+UICorner_20.CornerRadius = UDim.new(0, 5)
+UICorner_20.Parent = PartSec
+
+UIStroke_15.Parent = PartSec
+UIStroke_15.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_15.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_6.Name = "Line"
+Line_6.Parent = PartSec
+Line_6.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_6.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_6.BorderSizePixel = 0
+Line_6.Position = UDim2.new(0, 0, 0.205324396, 0)
+Line_6.Size = UDim2.new(0, 149, 0, 1)
+
+TitleSec_3.Name = "TitleSec"
+TitleSec_3.Parent = PartSec
+TitleSec_3.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_3.BackgroundTransparency = 1.000
+TitleSec_3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_3.BorderSizePixel = 0
+TitleSec_3.Position = UDim2.new(0.0410913005, 0, 0, 0)
+TitleSec_3.Size = UDim2.new(0, 43, 0, 17)
+TitleSec_3.Font = Enum.Font.Gotham
+TitleSec_3.Text = "Parts"
+TitleSec_3.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_3.TextSize = 12.000
+TitleSec_3.TextXAlignment = Enum.TextXAlignment.Left
+
+HeadButton.Name = "HeadButton"
+HeadButton.Parent = PartSec
+HeadButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+HeadButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+HeadButton.BorderSizePixel = 0
+HeadButton.Position = UDim2.new(0.0410914086, 0, 0.283879995, 0)
+HeadButton.Size = UDim2.new(0, 136, 0, 11)
+HeadButton.Font = Enum.Font.Gotham
+HeadButton.Text = "Head"
+HeadButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+HeadButton.TextSize = 11.000
+
+UICorner_21.CornerRadius = UDim.new(0, 1)
+UICorner_21.Parent = HeadButton
+
+UIStroke_16.Parent = HeadButton
+UIStroke_16.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_16.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+UpperButton.Name = "UpperButton"
+UpperButton.Parent = PartSec
+UpperButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+UpperButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+UpperButton.BorderSizePixel = 0
+UpperButton.Position = UDim2.new(0.0410914086, 0, 0.465971082, 0)
+UpperButton.Size = UDim2.new(0, 136, 0, 11)
+UpperButton.Font = Enum.Font.Gotham
+UpperButton.Text = "UppoerTorso"
+UpperButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+UpperButton.TextSize = 11.000
+
+UICorner_22.CornerRadius = UDim.new(0, 1)
+UICorner_22.Parent = UpperButton
+
+UIStroke_17.Parent = UpperButton
+UIStroke_17.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_17.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+TorsoButton.Name = "TorsoButton"
+TorsoButton.Parent = PartSec
+TorsoButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+TorsoButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TorsoButton.BorderSizePixel = 0
+TorsoButton.Position = UDim2.new(0.0410914086, 0, 0.645196557, 0)
+TorsoButton.Size = UDim2.new(0, 136, 0, 11)
+TorsoButton.Font = Enum.Font.Gotham
+TorsoButton.Text = "HumanoidRootPart"
+TorsoButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+TorsoButton.TextSize = 11.000
+
+UICorner_23.CornerRadius = UDim.new(0, 1)
+UICorner_23.Parent = TorsoButton
+
+UIStroke_18.Parent = TorsoButton
+UIStroke_18.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_18.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+LowerButton.Name = "LowerButton"
+LowerButton.Parent = PartSec
+LowerButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+LowerButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+LowerButton.BorderSizePixel = 0
+LowerButton.Position = UDim2.new(0.0410914086, 0, 0.824422121, 0)
+LowerButton.Size = UDim2.new(0, 136, 0, 11)
+LowerButton.Font = Enum.Font.Gotham
+LowerButton.Text = "LowerTorso"
+LowerButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+LowerButton.TextSize = 11.000
+
+UICorner_24.CornerRadius = UDim.new(0, 1)
+UICorner_24.Parent = LowerButton
+
+UIStroke_19.Parent = LowerButton
+UIStroke_19.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_19.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ResolverTab.Name = "ResolverTab"
+ResolverTab.Parent = MainBorder
+ResolverTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ResolverTab.BackgroundTransparency = 0.999
+ResolverTab.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ResolverTab.BorderSizePixel = 0
+ResolverTab.Position = UDim2.new(0.240999997, 0, 0.0729999989, 0)
+ResolverTab.Size = UDim2.new(0, 342, 0, 393)
+ResolverTab.Visible = false
+
+MainSec_2.Name = "MainSec"
+MainSec_2.Parent = ResolverTab
+MainSec_2.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+MainSec_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainSec_2.BorderSizePixel = 0
+MainSec_2.Position = UDim2.new(0.0170000009, 0, 0.0149999997, 0)
+MainSec_2.Size = UDim2.new(0, 162, 0, 80)
+
+UICorner_25.Parent = MainSec_2
+
+UIStroke_20.Parent = MainSec_2
+UIStroke_20.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_20.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_7.Name = "Line"
+Line_7.Parent = MainSec_2
+Line_7.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_7.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_7.BorderSizePixel = 0
+Line_7.Position = UDim2.new(-0.00617133267, 0, 0.296739966, 0)
+Line_7.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec_4.Name = "TitleSec"
+TitleSec_4.Parent = MainSec_2
+TitleSec_4.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_4.BackgroundTransparency = 1.000
+TitleSec_4.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_4.BorderSizePixel = 0
+TitleSec_4.Position = UDim2.new(0.0410000011, 0, 0, 0)
+TitleSec_4.Size = UDim2.new(0, 43, 0, 25)
+TitleSec_4.Font = Enum.Font.Gotham
+TitleSec_4.Text = "Main"
+TitleSec_4.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_4.TextSize = 14.000
+TitleSec_4.TextXAlignment = Enum.TextXAlignment.Left
+
+NoPredToggle.Name = "NoPredToggle"
+NoPredToggle.Parent = MainSec_2
+NoPredToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+NoPredToggle.Position = UDim2.new(0.859740436, 0, 0.380764008, 0)
+NoPredToggle.Size = UDim2.new(0, 15, 0, 15)
+NoPredToggle.Image = "rbxassetid://3926305904"
+NoPredToggle.ImageRectOffset = Vector2.new(312, 4)
+NoPredToggle.ImageRectSize = Vector2.new(24, 24)
+NoPredToggle.ImageTransparency = 1.000
+
+UICorner_26.CornerRadius = UDim.new(0, 3)
+UICorner_26.Parent = NoPredToggle
+
+UIStroke_21.Parent = NoPredToggle
+UIStroke_21.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_21.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_6.Name = "ToggleText"
+ToggleText_6.Parent = NoPredToggle
+ToggleText_6.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_6.BackgroundTransparency = 1.000
+ToggleText_6.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_6.BorderSizePixel = 0
+ToggleText_6.Position = UDim2.new(-8.94557667, 0, 0, 0)
+ToggleText_6.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_6.Font = Enum.Font.Gotham
+ToggleText_6.Text = "No Prediction"
+ToggleText_6.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_6.TextSize = 12.000
+ToggleText_6.TextXAlignment = Enum.TextXAlignment.Left
+
+MoveDirectionToggle.Name = "MoveDirectionToggle"
+MoveDirectionToggle.Parent = MainSec_2
+MoveDirectionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MoveDirectionToggle.Position = UDim2.new(0.859740436, 0, 0.647753119, 0)
+MoveDirectionToggle.Size = UDim2.new(0, 15, 0, 15)
+MoveDirectionToggle.Image = "rbxassetid://3926305904"
+MoveDirectionToggle.ImageRectOffset = Vector2.new(312, 4)
+MoveDirectionToggle.ImageRectSize = Vector2.new(24, 24)
+MoveDirectionToggle.ImageTransparency = 1.000
+
+UICorner_27.CornerRadius = UDim.new(0, 3)
+UICorner_27.Parent = MoveDirectionToggle
+
+UIStroke_22.Parent = MoveDirectionToggle
+UIStroke_22.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_22.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_7.Name = "ToggleText"
+ToggleText_7.Parent = MoveDirectionToggle
+ToggleText_7.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_7.BackgroundTransparency = 1.000
+ToggleText_7.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_7.BorderSizePixel = 0
+ToggleText_7.Position = UDim2.new(-8.94557667, 0, 0, 0)
+ToggleText_7.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_7.Font = Enum.Font.Gotham
+ToggleText_7.Text = "Move Direction"
+ToggleText_7.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_7.TextSize = 12.000
+ToggleText_7.TextXAlignment = Enum.TextXAlignment.Left
+
+VisualizerTab.Name = "VisualizerTab"
+VisualizerTab.Parent = MainBorder
+VisualizerTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+VisualizerTab.BackgroundTransparency = 0.999
+VisualizerTab.BorderColor3 = Color3.fromRGB(0, 0, 0)
+VisualizerTab.BorderSizePixel = 0
+VisualizerTab.Position = UDim2.new(0.240999997, 0, 0.0729999989, 0)
+VisualizerTab.Size = UDim2.new(0, 343, 0, 393)
+VisualizerTab.Visible = false
+
+MainSec_3.Name = "MainSec"
+MainSec_3.Parent = VisualizerTab
+MainSec_3.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+MainSec_3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainSec_3.BorderSizePixel = 0
+MainSec_3.Position = UDim2.new(0.0170000009, 0, 0.0149999997, 0)
+MainSec_3.Size = UDim2.new(0, 162, 0, 100)
+
+UICorner_28.Parent = MainSec_3
+
+UIStroke_23.Parent = MainSec_3
+UIStroke_23.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_23.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_8.Name = "Line"
+Line_8.Parent = MainSec_3
+Line_8.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_8.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_8.BorderSizePixel = 0
+Line_8.Position = UDim2.new(0, 0, 0.233157963, 0)
+Line_8.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec_5.Name = "TitleSec"
+TitleSec_5.Parent = MainSec_3
+TitleSec_5.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_5.BackgroundTransparency = 1.000
+TitleSec_5.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_5.BorderSizePixel = 0
+TitleSec_5.Position = UDim2.new(0.0410000011, 0, 0, 0)
+TitleSec_5.Size = UDim2.new(0, 43, 0, 25)
+TitleSec_5.Font = Enum.Font.Gotham
+TitleSec_5.Text = "Main"
+TitleSec_5.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_5.TextSize = 14.000
+TitleSec_5.TextXAlignment = Enum.TextXAlignment.Left
+
+TrailsToggle.Name = "TrailsToggle"
+TrailsToggle.Parent = MainSec_3
+TrailsToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+TrailsToggle.Position = UDim2.new(0.859740436, 0, 0.312105089, 0)
+TrailsToggle.Size = UDim2.new(0, 15, 0, 15)
+TrailsToggle.Image = "rbxassetid://3926305904"
+TrailsToggle.ImageRectOffset = Vector2.new(312, 4)
+TrailsToggle.ImageRectSize = Vector2.new(24, 24)
+TrailsToggle.ImageTransparency = 1.000
+
+UICorner_29.CornerRadius = UDim.new(0, 3)
+UICorner_29.Parent = TrailsToggle
+
+UIStroke_24.Parent = TrailsToggle
+UIStroke_24.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_24.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_8.Name = "ToggleText"
+ToggleText_8.Parent = TrailsToggle
+ToggleText_8.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_8.BackgroundTransparency = 1.000
+ToggleText_8.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_8.BorderSizePixel = 0
+ToggleText_8.Position = UDim2.new(-8.94558144, 0, 0, 0)
+ToggleText_8.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_8.Font = Enum.Font.Gotham
+ToggleText_8.Text = "Trails"
+ToggleText_8.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_8.TextSize = 12.000
+ToggleText_8.TextXAlignment = Enum.TextXAlignment.Left
+
+SelfChamToggle.Name = "SelfChamToggle"
+SelfChamToggle.Parent = MainSec_3
+SelfChamToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SelfChamToggle.Position = UDim2.new(0.859740436, 0, 0.737368166, 0)
+SelfChamToggle.Size = UDim2.new(0, 15, 0, 15)
+SelfChamToggle.Image = "rbxassetid://3926305904"
+SelfChamToggle.ImageRectOffset = Vector2.new(312, 4)
+SelfChamToggle.ImageRectSize = Vector2.new(24, 24)
+SelfChamToggle.ImageTransparency = 1.000
+
+UICorner_30.CornerRadius = UDim.new(0, 3)
+UICorner_30.Parent = SelfChamToggle
+
+UIStroke_25.Parent = SelfChamToggle
+UIStroke_25.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_25.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_9.Name = "ToggleText"
+ToggleText_9.Parent = SelfChamToggle
+ToggleText_9.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_9.BackgroundTransparency = 1.000
+ToggleText_9.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_9.BorderSizePixel = 0
+ToggleText_9.Position = UDim2.new(-8.94558144, 0, 0, 0)
+ToggleText_9.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_9.Font = Enum.Font.Gotham
+ToggleText_9.Text = "Self Cham"
+ToggleText_9.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_9.TextSize = 12.000
+ToggleText_9.TextXAlignment = Enum.TextXAlignment.Left
+
+PlayersChamToggle.Name = "PlayersChamToggle"
+PlayersChamToggle.Parent = MainSec_3
+PlayersChamToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+PlayersChamToggle.Position = UDim2.new(0.859740436, 0, 0.522631288, 0)
+PlayersChamToggle.Size = UDim2.new(0, 15, 0, 15)
+PlayersChamToggle.Image = "rbxassetid://3926305904"
+PlayersChamToggle.ImageRectOffset = Vector2.new(312, 4)
+PlayersChamToggle.ImageRectSize = Vector2.new(24, 24)
+PlayersChamToggle.ImageTransparency = 1.000
+
+UICorner_31.CornerRadius = UDim.new(0, 3)
+UICorner_31.Parent = PlayersChamToggle
+
+UIStroke_26.Parent = PlayersChamToggle
+UIStroke_26.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_26.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+ToggleText_10.Name = "ToggleText"
+ToggleText_10.Parent = PlayersChamToggle
+ToggleText_10.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleText_10.BackgroundTransparency = 1.000
+ToggleText_10.BorderColor3 = Color3.fromRGB(0, 0, 0)
+ToggleText_10.BorderSizePixel = 0
+ToggleText_10.Position = UDim2.new(-8.94558144, 0, 0, 0)
+ToggleText_10.Size = UDim2.new(0, 50, 0, 15)
+ToggleText_10.Font = Enum.Font.Gotham
+ToggleText_10.Text = "Player's Cham"
+ToggleText_10.TextColor3 = Color3.fromRGB(202, 202, 202)
+ToggleText_10.TextSize = 12.000
+ToggleText_10.TextXAlignment = Enum.TextXAlignment.Left
+
+WaypointSec.Name = "WaypointSec"
+WaypointSec.Parent = VisualizerTab
+WaypointSec.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+WaypointSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+WaypointSec.BorderSizePixel = 0
+WaypointSec.Position = UDim2.new(0.509000003, 0, 0.0130000003, 0)
+WaypointSec.Size = UDim2.new(0, 162, 0, 74)
+
+UICorner_32.Parent = WaypointSec
+
+UIStroke_27.Parent = WaypointSec
+UIStroke_27.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_27.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_9.Name = "Line"
+Line_9.Parent = WaypointSec
+Line_9.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_9.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_9.BorderSizePixel = 0
+Line_9.Position = UDim2.new(0, 0, 0.314239085, 0)
+Line_9.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec_6.Name = "TitleSec"
+TitleSec_6.Parent = WaypointSec
+TitleSec_6.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_6.BackgroundTransparency = 1.000
+TitleSec_6.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_6.BorderSizePixel = 0
+TitleSec_6.Position = UDim2.new(0.0410000011, 0, 0, 0)
+TitleSec_6.Size = UDim2.new(0, 43, 0, 25)
+TitleSec_6.Font = Enum.Font.Gotham
+TitleSec_6.Text = "Waypoint"
+TitleSec_6.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_6.TextSize = 14.000
+TitleSec_6.TextXAlignment = Enum.TextXAlignment.Left
+
+Waypoints.Name = "Waypoints"
+Waypoints.Parent = WaypointSec
+Waypoints.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Waypoints.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Waypoints.BorderSizePixel = 0
+Waypoints.Position = UDim2.new(0.0370370373, 0, 0.430212885, 0)
+Waypoints.Size = UDim2.new(0, 150, 0, 15)
+Waypoints.Font = Enum.Font.Gotham
+Waypoints.PlaceholderText = "Name"
+Waypoints.Text = ""
+Waypoints.TextColor3 = Color3.fromRGB(202, 202, 202)
+Waypoints.TextSize = 10.000
+
+UICorner_33.CornerRadius = UDim.new(0, 3)
+UICorner_33.Parent = Waypoints
+
+UIStroke_28.Parent = Waypoints
+UIStroke_28.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_28.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+WaypointButton.Name = "WaypointButton"
+WaypointButton.Parent = WaypointSec
+WaypointButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+WaypointButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+WaypointButton.BorderSizePixel = 0
+WaypointButton.Position = UDim2.new(0.0349181369, 0, 0.716558516, 0)
+WaypointButton.Size = UDim2.new(0, 150, 0, 15)
+WaypointButton.Font = Enum.Font.Gotham
+WaypointButton.Text = "Create"
+WaypointButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+WaypointButton.TextSize = 11.000
+
+UICorner_34.CornerRadius = UDim.new(0, 3)
+UICorner_34.Parent = WaypointButton
+
+UIStroke_29.Parent = WaypointButton
+UIStroke_29.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_29.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+CharacterSec.Name = "CharacterSec"
+CharacterSec.Parent = VisualizerTab
+CharacterSec.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+CharacterSec.BorderColor3 = Color3.fromRGB(0, 0, 0)
+CharacterSec.BorderSizePixel = 0
+CharacterSec.Position = UDim2.new(0.507691145, 0, 0.22106111, 0)
+CharacterSec.Size = UDim2.new(0, 162, 0, 74)
+
+UICorner_35.Parent = CharacterSec
+
+UIStroke_30.Parent = CharacterSec
+UIStroke_30.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_30.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+Line_10.Name = "Line"
+Line_10.Parent = CharacterSec
+Line_10.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Line_10.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Line_10.BorderSizePixel = 0
+Line_10.Position = UDim2.new(0, 0, 0.314239085, 0)
+Line_10.Size = UDim2.new(0, 162, 0, 1)
+
+TitleSec_7.Name = "TitleSec"
+TitleSec_7.Parent = CharacterSec
+TitleSec_7.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleSec_7.BackgroundTransparency = 1.000
+TitleSec_7.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TitleSec_7.BorderSizePixel = 0
+TitleSec_7.Position = UDim2.new(0.0410000011, 0, 0, 0)
+TitleSec_7.Size = UDim2.new(0, 43, 0, 25)
+TitleSec_7.Font = Enum.Font.Gotham
+TitleSec_7.Text = "Character"
+TitleSec_7.TextColor3 = Color3.fromRGB(202, 202, 202)
+TitleSec_7.TextSize = 14.000
+TitleSec_7.TextXAlignment = Enum.TextXAlignment.Left
+
+HeadlessButton.Name = "HeadlessButton"
+HeadlessButton.Parent = CharacterSec
+HeadlessButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+HeadlessButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+HeadlessButton.BorderSizePixel = 0
+HeadlessButton.Position = UDim2.new(0.0349181369, 0, 0.419261217, 0)
+HeadlessButton.Size = UDim2.new(0, 150, 0, 15)
+HeadlessButton.Font = Enum.Font.Gotham
+HeadlessButton.Text = "Headless"
+HeadlessButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+HeadlessButton.TextSize = 11.000
+
+UICorner_36.CornerRadius = UDim.new(0, 3)
+UICorner_36.Parent = HeadlessButton
+
+UIStroke_31.Parent = HeadlessButton
+UIStroke_31.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_31.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+KorbloxButton.Name = "KorbloxButton"
+KorbloxButton.Parent = CharacterSec
+KorbloxButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+KorbloxButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+KorbloxButton.BorderSizePixel = 0
+KorbloxButton.Position = UDim2.new(0.0349181369, 0, 0.716558516, 0)
+KorbloxButton.Size = UDim2.new(0, 150, 0, 15)
+KorbloxButton.Font = Enum.Font.Gotham
+KorbloxButton.Text = "Korblox"
+KorbloxButton.TextColor3 = Color3.fromRGB(202, 202, 202)
+KorbloxButton.TextSize = 11.000
+
+UICorner_37.CornerRadius = UDim.new(0, 3)
+UICorner_37.Parent = KorbloxButton
+
+UIStroke_32.Parent = KorbloxButton
+UIStroke_32.Color = Color3.fromRGB(35, 35, 35)
+UIStroke_32.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+-- Scripts:
+
+local function CIYCR_script() -- AimbotButton.LocalScript 
+	local script = Instance.new('LocalScript', AimbotButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		script.Parent.Parent.AimbotButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		script.Parent.Parent.AimbotTab.Visible = true
+		script.Parent.Parent.ResolverButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.ResolverTab.Visible = false
+		
+		script.Parent.Parent.VisualButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.VisualizerTab.Visible = false
+	end)
+end
+coroutine.wrap(CIYCR_script)()
+local function ASQSLQL_script() -- ResolverButton.LocalScript 
+	local script = Instance.new('LocalScript', ResolverButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		script.Parent.Parent.AimbotButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.AimbotTab.Visible = false
+		script.Parent.Parent.ResolverButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		script.Parent.Parent.ResolverTab.Visible = true
+	
+		script.Parent.Parent.VisualButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.VisualizerTab.Visible = false
+	end)
+end
+coroutine.wrap(ASQSLQL_script)()
+local function MBBMU_script() -- VisualButton.LocalScript 
+	local script = Instance.new('LocalScript', VisualButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		script.Parent.Parent.AimbotButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.AimbotTab.Visible = false
+		script.Parent.Parent.ResolverButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		script.Parent.Parent.ResolverTab.Visible = false
+	
+		script.Parent.Parent.VisualButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		script.Parent.Parent.VisualizerTab.Visible = true
+	end)
+end
+coroutine.wrap(MBBMU_script)()
+local function MXBUG_script() -- AimlockToggle.LocalScript 
+	local script = Instance.new('LocalScript', AimlockToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			Aimlock = true
+			script.Parent.Parent.AimlockToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.AimlockToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			Aimlock = false
+			script.Parent.Parent.AimlockToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.AimlockToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(MXBUG_script)()
+local function XGJDVZP_script() -- PredictionToggle.LocalScript 
+	local script = Instance.new('LocalScript', PredictionToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			PredictMovement = true
+			script.Parent.Parent.PredictionToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.PredictionToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			PredictMovement = false
+			script.Parent.Parent.PredictionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.PredictionToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(XGJDVZP_script)()
+local function QEHTCD_script() -- SmoothnessToggle.LocalScript 
+	local script = Instance.new('LocalScript', SmoothnessToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			Smoothness = true
+			script.Parent.Parent.SmoothnessToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.SmoothnessToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			Smoothness = false
+			script.Parent.Parent.SmoothnessToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.SmoothnessToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(QEHTCD_script)()
+local function VVBSE_script() -- AutoPredictionToggle.LocalScript 
+	local script = Instance.new('LocalScript', AutoPredictionToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			game:GetService('RunService'):BindToRenderStep('AutoPrediction', 0, function()
+				local pingvalue = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString()
+				local split = string.split(pingvalue, " ")
+				local ping = split[1]
+				if tonumber(ping) <= 10 or 20 then
+					PredictionVelocity = 0.1099
+				elseif tonumber(ping) < 35 then
+					PredictionVelocity = 0.1294
+				elseif tonumber(ping) < 40 then
+					PredictionVelocity = 0.1295
+				elseif tonumber(ping) < 45 then
+					PredictionVelocity = 0.1307
+				elseif tonumber(ping) < 50 then
+					PredictionVelocity = 0.1319
+				elseif tonumber(ping) < 55 then
+					PredictionVelocity = 0.1338
+				elseif tonumber(ping) < 60 then
+					PredictionVelocity = 0.1337 
+				elseif tonumber(ping) < 65 then 
+					PredictionVelocity = 0.1364 
+				elseif tonumber(ping) < 70 then
+					PredictionVelocity = 0.1433
+				elseif tonumber(ping) < 75 then
+					PredictionVelocity = 0.1433
+				elseif tonumber(ping) < 80 then 
+					PredictionVelocity = 0.1433 
+				elseif tonumber(ping) < 85 then
+					PredictionVelocity = 0.14333
+				elseif tonumber(ping) < 90 then
+					PredictionVelocity = 0.1433
+				elseif tonumber(ping) < 95 then
+					PredictionVelocity = 0.1463
+				elseif tonumber(ping) < 100 then
+					PredictionVelocity = 0.1488
+				elseif tonumber(ping) < 105 then
+					PredictionVelocity = 0.1528
+				elseif tonumber(ping) < 110 then
+					PredictionVelocity = 0.1569
+				elseif tonumber(ping) < 120 then
+					PredictionVelocity = 0.15783943
+				elseif tonumber(ping) < 130 then
+					PredictionVelocity = 0.16275864
+				elseif tonumber(ping) < 140 then
+					PredictionVelocity = 0.16482643
+				elseif tonumber(ping) < 150 then
+					PredictionVelocity = 0.16973582
+				end
+			end)
+			script.Parent.Parent.AutoPredictionToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.AutoPredictionToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			game:GetService('RunService'):UnbindFromRenderStep('AutoPrediction')
+			script.Parent.Parent.AutoPredictionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.AutoPredictionToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(VVBSE_script)()
+local function EBCL_script() -- TeamCheckToggle.LocalScript 
+	local script = Instance.new('LocalScript', TeamCheckToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			TeamCheck = true
+			script.Parent.Parent.TeamCheckToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.TeamCheckToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			TeamCheck = false
+			script.Parent.Parent.TeamCheckToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.TeamCheckToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(EBCL_script)()
+local function YEYGGPE_script() -- Keybind.LocalScript 
+	local script = Instance.new('LocalScript', Keybind)
+
+	script.Parent.FocusLost:Connect(function()
+		AimlockKey = script.Parent.Parent.Keybind.Text
+	end)
+end
+coroutine.wrap(YEYGGPE_script)()
+local function JVPA_script() -- Prediction.LocalScript 
+	local script = Instance.new('LocalScript', Prediction)
+
+	script.Parent.FocusLost:Connect(function()
+		PredictionVelocity = script.Parent.Parent.Prediction.Text
+	end)
+end
+coroutine.wrap(JVPA_script)()
+local function EXQDUK_script() -- Smoothness.LocalScript 
+	local script = Instance.new('LocalScript', Smoothness)
+
+	script.Parent.FocusLost:Connect(function()
+		SmoothnessAmount = script.Parent.Parent.Smoothness.Text
+	end)
+end
+coroutine.wrap(EXQDUK_script)()
+local function MSQMCK_script() -- HitPartButton.LocalScript 
+	local script = Instance.new('LocalScript', HitPartButton)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == true then
+			Toggle = false
+		else
+			Toggle = true
+		end
+		
+		if Toggle == true then
+			script.Parent.Parent.HitPartButton.PartSec.Visible = true
+			script.Parent.Parent.HitPartButton.Text = "Hit-Part -"
+		end
+		
+		if Toggle == false then
+			script.Parent.Parent.HitPartButton.PartSec.Visible = false
+			script.Parent.Parent.HitPartButton.Text = "Hit-Part +"
+		end
+	end)
+end
+coroutine.wrap(MSQMCK_script)()
+local function ZZFI_script() -- HeadButton.LocalScript 
+	local script = Instance.new('LocalScript', HeadButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		AimPart = "Head"
+	end)
+end
+coroutine.wrap(ZZFI_script)()
+local function MEFQ_script() -- UpperButton.LocalScript 
+	local script = Instance.new('LocalScript', UpperButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		AimPart = "UpperTorso"
+	end)
+end
+coroutine.wrap(MEFQ_script)()
+local function DWCBTY_script() -- TorsoButton.LocalScript 
+	local script = Instance.new('LocalScript', TorsoButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		AimPart = "HumanoidRootPart"
+	end)
+end
+coroutine.wrap(DWCBTY_script)()
+local function VHQOHL_script() -- LowerButton.LocalScript 
+	local script = Instance.new('LocalScript', LowerButton)
+
+	script.Parent.MouseButton1Up:Connect(function()
+		AimPart = "LowerTorso"
+	end)
+end
+coroutine.wrap(VHQOHL_script)()
+local function WPCWE_script() -- NoPredToggle.LocalScript 
+	local script = Instance.new('LocalScript', NoPredToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			game:GetService('RunService'):BindToRenderStep('Resolver1', 0, function()
+				for i,v in pairs(game.Players:GetChildren()) do
+					if v.Name ~= game.Players.LocalPlayer.Name then
+						local hrp = v.Character.HumanoidRootPart
+						hrp.Velocity = Vector3.new(0, 0, 0)    
+						hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)   
+					end
+				end
+			end)
+			script.Parent.Parent.NoPredToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.NoPredToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			game:GetService('RunService'):UnbindFromRenderStep('Resolver1')
+			script.Parent.Parent.NoPredToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.NoPredToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(WPCWE_script)()
+local function MOMJV_script() -- MoveDirectionToggle.LocalScript 
+	local script = Instance.new('LocalScript', MoveDirectionToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+		
+		if Toggle == true then
+			game:GetService('RunService'):BindToRenderStep('Resolver2', 0, function()
+				for i,v in pairs(game.Players:GetChildren()) do
+					if v.Name ~= game.Players.LocalPlayer.Name then
+						local hrp = v.Character.HumanoidRootPart
+						hrp.Velocity = v.Character.Humanoid.MoveDirection * 16.5
+						hrp.AssemblyLinearVelocity = v.Character.Humanoid.MoveDirection * 16.5
+					end
+				end
+			end)
+			script.Parent.Parent.MoveDirectionToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.MoveDirectionToggle.ImageTransparency = 0
+		end
+		
+		if Toggle == false then
+			game:GetService('RunService'):UnbindFromRenderStep('Resolver2')
+			script.Parent.Parent.MoveDirectionToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.MoveDirectionToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(MOMJV_script)()
+local function XROUDGE_script() -- TrailsToggle.LocalScript 
+	local script = Instance.new('LocalScript', TrailsToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+	
+		if Toggle == true then
+			game:GetService('RunService'):BindToRenderStep('Trails', 0, function()
+				local part1 = Instance.new('Part')
+				part1.Parent = workspace
+				part1.Name = 'Waypoint'
+				part1.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+				part1.Position = game.Players.LocalPlayer.Character:FindFirstChild('LeftHand').Position
+				part1.Material = Enum.Material.Neon
+				part1.Size = Vector3.new(0.1, 0.1, 0.5)
+				part1.Anchored = true
+				part1.CanCollide = false
+				part1.Color = Color3.fromRGB(171, 171, 255)
+	
+				local part2 = Instance.new('Part')
+				part2.Parent = workspace
+				part2.Name = 'Waypoint'
+				part2.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+				part2.Position = game.Players.LocalPlayer.Character:FindFirstChild('RightHand').Position
+				part2.Material = Enum.Material.Neon
+				part2.Size = Vector3.new(0.1, 0.1, 0.5)
+				part2.Anchored = true
+				part2.CanCollide = false
+				part2.Color = Color3.fromRGB(171, 171, 255)
+	
+				local part3 = Instance.new('Part')
+				part3.Parent = workspace
+				part3.Name = 'Waypoint'
+				part3.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+				part3.Position = game.Players.LocalPlayer.Character:FindFirstChild('RightFoot').Position
+				part3.Material = Enum.Material.Neon
+				part3.Size = Vector3.new(0.1, 0.1, 0.5)
+				part3.Anchored = true
+				part3.CanCollide = false
+				part3.Color = Color3.fromRGB(171, 171, 255)
+	
+				local part4 = Instance.new('Part')
+				part4.Parent = workspace
+				part4.Name = 'Waypoint'
+				part4.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+				part4.Position = game.Players.LocalPlayer.Character:FindFirstChild('LeftFoot').Position
+				part4.Material = Enum.Material.Neon
+				part4.Size = Vector3.new(0.1, 0.1, 0.5)
+				part4.Anchored = true
+				part4.CanCollide = false
+				part4.Color = Color3.fromRGB(171, 171, 255)
+	
+				local part5 = Instance.new('Part')
+				part5.Parent = workspace
+				part5.Name = 'Waypoint'
+				part5.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+				part5.Position = game.Players.LocalPlayer.Character:FindFirstChild('HumanoidRootPart').Position
+				part5.Material = Enum.Material.Neon
+				part5.Size = Vector3.new(0.1, 0.1, 0.5)
+				part5.Anchored = true
+				part5.CanCollide = false
+				part5.Color = Color3.fromRGB(171, 171, 255)
+	
+				wait(1)
+				part1:Destroy()
+				part2:Destroy()
+				part3:Destroy()
+				part4:Destroy()
+				part5:Destroy()
+			end)
+			script.Parent.Parent.TrailsToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.TrailsToggle.ImageTransparency = 0
+		end
+	
+		if Toggle == false then
+			game:GetService('RunService'):UnbindFromRenderStep('Trails')
+			script.Parent.Parent.TrailsToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.TrailsToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(XROUDGE_script)()
+local function STAMBDR_script() -- SelfChamToggle.LocalScript 
+	local script = Instance.new('LocalScript', SelfChamToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+	
+		if Toggle == true then
+			for i, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.Material = Enum.Material.ForceField
+				end
+			end
+	
+			script.Parent.Parent.SelfChamToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.SelfChamToggle.ImageTransparency = 0
+		end
+	
+		if Toggle == false then
+			for i, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.Material = Enum.Material.Plastic
+				end
+			end
+			script.Parent.Parent.SelfChamToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.SelfChamToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(STAMBDR_script)()
+local function JLTMSJ_script() -- PlayersChamToggle.LocalScript 
+	local script = Instance.new('LocalScript', PlayersChamToggle)
+
+	local Toggle = false
+	
+	script.Parent.MouseButton1Up:Connect(function()
+		if Toggle == false then
+			Toggle = true
+		else
+			Toggle = false
+		end
+	
+		if Toggle == true then
+			for i, v in pairs(game:GetService("Workspace").Players:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.Material = Enum.Material.ForceField
+				end
+			end
+			script.Parent.Parent.PlayersChamToggle.BackgroundColor3 = Color3.fromRGB(85, 85, 127) script.Parent.Parent.PlayersChamToggle.ImageTransparency = 0
+		end
+	
+		if Toggle == false then
+			for i, v in pairs(game:GetService("Workspace").Players:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.Material = Enum.Material.Plastic
+				end
+			end
+			script.Parent.Parent.PlayersChamToggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25) script.Parent.Parent.PlayersChamToggle.ImageTransparency = 1
+		end
+	end)
+end
+coroutine.wrap(JLTMSJ_script)()
+local function JWJA_script() -- WaypointButton.LocalScript 
+	local script = Instance.new('LocalScript', WaypointButton)
+
+	script.Parent.MouseButton1Down:Connect(function()
+		local BillboardGui = Instance.new("BillboardGui")
+		local TextLabel = Instance.new("TextLabel")
+		local Part = Instance.new('Part')
+		local SelectionBox = Instance.new('SelectionBox')
+	
+		Part.Parent = workspace
+		Part.Name = 'Waypoint'
+		Part.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+		Part.Material = Enum.Material.Neon
+		Part.Size = Vector3.new(0.5, 0.5, 0.5)
+		Part.Anchored = true
+		Part.CanCollide = false
+		Part.Color = Color3.fromRGB(171, 171, 255)
+	
+		BillboardGui.Parent = Part
+		BillboardGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		BillboardGui.Active = true
+		BillboardGui.AlwaysOnTop = true
+		BillboardGui.LightInfluence = 1.000
+		BillboardGui.Size = UDim2.new(0, 200, 0, 50)
+	
+		TextLabel.Parent = BillboardGui
+		TextLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		TextLabel.BackgroundTransparency = 1.000
+		TextLabel.Size = UDim2.new(0, 200, 0, 50)
+		TextLabel.Font = Enum.Font.Code
+		TextLabel.Text = script.Parent.Parent.Waypoints.Text
+		TextLabel.TextColor3 = Color3.fromRGB(202, 202, 202)
+		TextLabel.TextSize = 13
+		TextLabel.TextStrokeTransparency = 0.000
+	
+		SelectionBox.Color3 = Color3.fromRGB(255, 255, 255)
+		SelectionBox.LineThickness = 0.01
+		SelectionBox.SurfaceColor3 = Color3.fromRGB(13, 105, 172)
+		SelectionBox.SurfaceTransparency = 1
+		SelectionBox.Transparency = 0
+		SelectionBox.Archivable = true
+		SelectionBox.Adornee = Part
+		SelectionBox.Name = 'SelectionBox'
+		SelectionBox.Parent = Part
+		SelectionBox.Visible = true
+	end)
+end
+coroutine.wrap(JWJA_script)()
+local function CGCD_script() -- HeadlessButton.LocalScript 
+	local script = Instance.new('LocalScript', HeadlessButton)
+
+	script.Parent.MouseButton1Down:Connect(function()
+		game.Players.LocalPlayer.Character.Head.Transparency = 1
+		game.Players.LocalPlayer.Character.Head.Transparency = 1
+		for i,v in pairs(game.Players.LocalPlayer.Character.Head:GetChildren()) do
+			if (v:IsA("Decal")) then
+				v.Transparency = 1
+			end
+		end
+	end)
+end
+coroutine.wrap(CGCD_script)()
+local function GCWKLWP_script() -- KorbloxButton.LocalScript 
+	local script = Instance.new('LocalScript', KorbloxButton)
+
+	script.Parent.MouseButton1Down:Connect(function()
+		game.Players.LocalPlayer.Character.RightLowerLeg.MeshId = "902942093"
+		game.Players.LocalPlayer.Character.RightLowerLeg.Transparency = "1"
+		game.Players.LocalPlayer.Character.RightUpperLeg.MeshId = "http://www.roblox.com/asset/?id=902942096"
+		game.Players.LocalPlayer.Character.RightUpperLeg.TextureID = "http://roblox.com/asset/?id=902843398"
+		game.Players.LocalPlayer.Character.RightFoot.MeshId = "902942089"
+		game.Players.LocalPlayer.Character.RightFoot.Transparency = "1"
+	end)
+end
+coroutine.wrap(GCWKLWP_script)()
+local function GUWB_script() -- Background.LocalScript 
+	local script = Instance.new('LocalScript', Background)
+
+	game:GetService("Players").LocalPlayer:GetMouse().KeyDown:Connect(function(Key)
+		if Key == 'v' then
+			if script.Parent.Parent.Background.Visible == true then
+				script.Parent.Parent.Background.Visible = false
+			else
+				script.Parent.Parent.Background.Visible = true
+			end
+		end
+	end)
+end
+coroutine.wrap(GUWB_script)()
+local function XNYWFCV_script() -- Background.LocalScript 
+	local script = Instance.new('LocalScript', Background)
+
+	script.Parent.Parent.Background.Active = true
+	script.Parent.Parent.Background.Draggable = true
+	
+end
+coroutine.wrap(XNYWFCV_script)()
